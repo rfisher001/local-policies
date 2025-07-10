@@ -1,0 +1,120 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: sriov-subscription-policy
+  namespace: policies
+  annotations:
+    policy.open-cluster-management.io/standards: NIST SP 800-53
+    policy.open-cluster-management.io/categories: CM Configuration Management
+    policy.open-cluster-management.io/controls: CM-2 Baseline Configuration
+    policy.open-cluster-management.io/description: |
+      This policy installs the SR-IOV Network Operator subscription on OpenShift clusters.
+      SR-IOV enables high-performance networking by allowing direct hardware access to network interfaces.
+spec:
+  remediationAction: enforce
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: sriov-namespace
+        spec:
+          remediationAction: enforce
+          severity: high
+          namespaceSelector:
+            exclude:
+              - kube-*
+            include:
+              - default
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: v1
+                kind: Namespace
+                metadata:
+                  name: openshift-sriov-network-operator
+                  labels:
+                    openshift.io/cluster-monitoring: "true"
+                    pod-security.kubernetes.io/enforce: privileged
+                    pod-security.kubernetes.io/audit: privileged
+                    pod-security.kubernetes.io/warn: privileged
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: sriov-operator-group
+        spec:
+          remediationAction: enforce
+          severity: high
+          namespaceSelector:
+            exclude:
+              - kube-*
+            include:
+              - default
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: operators.coreos.com/v1
+                kind: OperatorGroup
+                metadata:
+                  name: sriov-network-operators
+                  namespace: openshift-sriov-network-operator
+                spec:
+                  targetNamespaces:
+                    - openshift-sriov-network-operator
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: sriov-subscription
+        spec:
+          remediationAction: enforce
+          severity: high
+          namespaceSelector:
+            exclude:
+              - kube-*
+            include:
+              - default
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: operators.coreos.com/v1alpha1
+                kind: Subscription
+                metadata:
+                  name: sriov-network-operator-subscription
+                  namespace: openshift-sriov-network-operator
+                spec:
+                  channel: stable
+                  name: sriov-network-operator
+                  source: redhat-operators
+                  sourceNamespace: openshift-marketplace
+                  installPlanApproval: Automatic
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: sriov-subscription-placement-binding
+  namespace: policies
+placementRef:
+  name: sriov-subscription-placement
+  kind: PlacementRule
+  apiGroup: apps.open-cluster-management.io
+subjects:
+  - name: sriov-subscription-policy
+    kind: Policy
+    apiGroup: policy.open-cluster-management.io
+---
+apiVersion: apps.open-cluster-management.io/v1
+kind: PlacementRule
+metadata:
+  name: sriov-subscription-placement
+  namespace: policies
+spec:
+  clusterConditions:
+    - status: "True"
+      type: ManagedClusterConditionAvailable
+  clusterSelector:
+    matchLabels:
+      sriov-capable: "true"
+      vendor: "OpenShift" 
